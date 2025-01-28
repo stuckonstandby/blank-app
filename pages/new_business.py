@@ -3,93 +3,89 @@ import pandas as pd
 import altair as alt
 from datetime import datetime
 
+st.image("assets/capitalmarketslogo.png", width=400)
+
 def main():
-    st.title("Market Performance Simulator (CAD)")
+    st.title("Market Performance Simulator (CAD) - Manual Input")
 
     st.write("""
     This tool compares:
     1. **Utility Cost** (Local Utility)
     2. **Client Cost** (Wholesale + Admin Fee)
     with an optional **Volumetric Hedge** (partial fixed rate).
-    All currency is assumed to be in **CAD**.
+    
+    **Monthly consumption is entered manually** below.
     """)
 
+    # 1. Monthly Consumption (Manual)
+    st.header("Monthly Consumption Patterns (m³)")
     MONTH_NAMES = [
         "January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"
     ]
-
-    # ----- SINGLE FORM -----
-    with st.form("input_form"):
-        # 1. Monthly Consumption
-        st.header("Monthly Consumption Patterns (m³)")
-        consumption = {}
-        for i, name in enumerate(MONTH_NAMES, start=1):
-            consumption[i] = st.number_input(
-                f"{name}",
-                min_value=0.0,
-                step=1.0,
-                format="%.2f"
-            )
-
-        # 2. Date Range & Admin Fee
-        st.header("Date Range and Administrative Fee")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            start_date_input = st.date_input("Start Date", value=datetime(2021, 1, 1))
-        with col2:
-            end_date_input = st.date_input("End Date", value=datetime(2021, 12, 31))
-        with col3:
-            admin_fee = st.number_input("Admin Fee (cents/m³)", min_value=0.0, step=0.1, format="%.2f")
-
-        # 3. Zone Selector
-        st.header("Zone Selection")
-        zone = st.selectbox(
-            "Select your zone:",
-            ["EGD Zone", "Union South Zone"]
+    consumption = {}
+    for i, name in enumerate(MONTH_NAMES, start=1):
+        consumption[i] = st.number_input(
+            f"{name}",
+            min_value=0.0,
+            step=1.0,
+            format="%.2f"
         )
 
-        # 4. Volumetric Hedge Section
-        st.header("Volumetric Hedge")
-        st.write("Define a partial fixed-rate hedge. Check the box below to enable it.")
-        use_hedge = st.checkbox("Include Volumetric Hedge?")
+    # 2. Date Range & Admin Fee
+    st.header("Date Range and Administrative Fee")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        start_date_input = st.date_input("Start Date", value=datetime(2021, 1, 1))
+    with col2:
+        end_date_input = st.date_input("End Date", value=datetime(2021, 12, 31))
+    with col3:
+        admin_fee = st.number_input("Admin Fee (cents/m³)", min_value=0.0, step=0.1, format="%.2f")
 
-        hedge_portion_percent = 0.0
-        hedge_start_date_input = None
-        hedge_term_months = 0
-        hedge_fixed_rate = 0.0
+    # 3. Zone Selection
+    st.header("Zone Selection")
+    zone = st.selectbox(
+        "Select your zone:",
+        ["EGD Zone", "Union South Zone"]
+    )
 
-        if use_hedge:
-            # Only show hedge inputs if user wants to include it
-            hedge_portion_percent = st.number_input(
-                "Hedged portion of monthly volume (%)",
-                min_value=0.0,
-                max_value=100.0,
-                step=1.0,
-                value=30.0
-            )
-            # Limit hedge start date to be within the main date range
-            hedge_start_date_input = st.date_input(
-                "Hedge Start Date",
-                value=start_date_input,  # default to main start
-                min_value=start_date_input,
-                max_value=end_date_input
-            )
-            hedge_term_months = st.number_input("Hedge Term (months)", min_value=0, value=6)
-            hedge_fixed_rate = st.number_input("Hedge Fixed Rate (cents/m³)", min_value=0.0, step=0.1, format="%.2f")
+    # 4. Volumetric Hedge
+    st.header("Volumetric Hedge")
+    st.write("Define a partial fixed-rate hedge. Check the box below to enable it.")
+    use_hedge = st.checkbox("Include Volumetric Hedge?")
 
-        # 5. Checkboxes for detailed outputs
-        st.header("Additional Options")
-        show_monthly_chart = st.checkbox("Show monthly bar chart of costs?", value=True)
-        show_monthly_table = st.checkbox("Show monthly cost table & differences?", value=True)
+    hedge_portion_percent = 0.0
+    hedge_start_date_input = None
+    hedge_term_months = 0
+    hedge_fixed_rate = 0.0
 
-        # 6. Submit button
-        submitted = st.form_submit_button("Submit")
+    if use_hedge:
+        hedge_portion_percent = st.number_input(
+            "Hedged portion of monthly volume (%)",
+            min_value=0.0,
+            max_value=100.0,
+            step=1.0,
+            value=30.0
+        )
+        hedge_start_date_input = st.date_input(
+            "Hedge Start Date",
+            value=start_date_input,  # default to main start
+            min_value=start_date_input,
+            max_value=end_date_input
+        )
+        hedge_term_months = st.number_input("Hedge Term (months)", min_value=0, value=6)
+        hedge_fixed_rate = st.number_input("Hedge Fixed Rate (cents/m³)", min_value=0.0, step=0.1, format="%.2f")
 
-    # Only run calculations after the user presses Submit
+    # 5. Additional Options
+    st.header("Additional Options")
+    show_monthly_chart = st.checkbox("Show monthly bar chart of costs?", value=True)
+    show_monthly_table = st.checkbox("Show monthly cost table & differences?", value=True)
+
+    # 6. Submit button
+    submitted = st.button("Submit", type="primary")
+
     if not submitted:
-        st.info("Please fill out the form above and click Submit.")
-        return
+        st.stop()
 
     # ----- POST-SUBMIT LOGIC -----
     # Convert date inputs to Pandas Timestamps
@@ -99,21 +95,23 @@ def main():
     # If hedge is enabled, also convert the hedge start date
     if use_hedge and hedge_start_date_input:
         hedge_start_ts = pd.to_datetime(hedge_start_date_input)
+        hedge_end_ts = hedge_start_ts + pd.DateOffset(months=int(hedge_term_months))
     else:
         hedge_start_ts = None
+        hedge_end_ts = None
 
-    # 7. Load Historical Data
-    csv_path = "/workspaces/blank-app/historical_data.csv"  # Adjust if needed
+    # 7. Load Historical Rate Data (Ensure you have the correct path)
+    csv_path = "/workspaces/blank-app/historical_data.csv"
     try:
         df = pd.read_csv(csv_path, parse_dates=["date"])
     except FileNotFoundError:
         st.error(f"Could not find '{csv_path}'. Please ensure the file exists at that path.")
-        return
+        st.stop()
 
     required_columns = {"date", "wholesale_rate", "local_utility_rate_egd", "local_utility_rate_usouth"}
     if not required_columns.issubset(df.columns):
         st.error(f"CSV is missing required columns. Expected columns: {required_columns}")
-        return
+        st.stop()
 
     st.subheader("Reference Data (Preview)")
     st.dataframe(df.head())
@@ -123,8 +121,8 @@ def main():
     df_filtered = df.loc[mask].copy()
 
     if df_filtered.empty:
-        st.warning("No data found for the selected date range. Please adjust your dates or check your CSV.")
-        return
+        st.warning("No rate data found for the selected date range. Please adjust your dates or check your CSV.")
+        st.stop()
 
     # 9. Select correct local utility column based on zone
     if zone == "EGD Zone":
@@ -132,7 +130,7 @@ def main():
     else:
         df_filtered["utility_selected"] = df_filtered["local_utility_rate_usouth"]
 
-    # 10. Aggregate monthly data
+    # 10. Aggregate monthly data (rates)
     df_filtered["year_month"] = df_filtered["date"].dt.to_period("M")
     monthly_rates = (
         df_filtered
@@ -142,7 +140,7 @@ def main():
             "utility_selected": "mean"
         })
     )
-    # Convert to Timestamp (first day of that month)
+    # Convert to Timestamp
     monthly_rates["year_month"] = monthly_rates["year_month"].apply(lambda x: x.start_time)
     monthly_rates.sort_values("year_month", inplace=True)
     monthly_rates.reset_index(drop=True, inplace=True)
@@ -151,47 +149,36 @@ def main():
     st.dataframe(monthly_rates.head())
 
     # 11. Calculate monthly costs (in cents)
-    monthly_cost_utility = []  # Utility Cost
-    monthly_cost_client = []   # Client Cost (Wholesale + Admin Fee, possibly hedged)
-
-    # Determine end of hedge window if user is using a hedge
-    if use_hedge and hedge_start_ts:
-        hedge_end_ts = hedge_start_ts + pd.DateOffset(months=int(hedge_term_months))
-    else:
-        hedge_end_ts = None
+    monthly_cost_utility = []
+    monthly_cost_client = []
 
     for _, row in monthly_rates.iterrows():
-        # Make sure it's a Timestamp
         month_datetime = pd.Timestamp(row["year_month"])
+        w_rate = row["wholesale_rate"]
+        utility_rate = row["utility_selected"]
 
-        w_rate = row["wholesale_rate"]          # cents/m³ (wholesale)
-        utility_rate = row["utility_selected"]  # cents/m³ (local utility)
-        month_num = month_datetime.month
-        month_consumption = consumption[month_num]
+        mnum = month_datetime.month
+        month_consumption = consumption[mnum]
 
-        # 1) Utility Cost
+        # Utility Cost
         cost_utility = month_consumption * utility_rate
-        monthly_cost_utility.append(cost_utility)
 
-        # 2) Client Cost (Wholesale + Admin Fee, partial hedge if applicable)
-        if use_hedge and (hedge_start_ts <= month_datetime < hedge_end_ts):
+        # Client Cost (Wholesale + Admin Fee, partial hedge if applicable)
+        if use_hedge and hedge_start_ts and (hedge_start_ts <= month_datetime < hedge_end_ts):
             # Hedge portion
             hedged_volume = month_consumption * (hedge_portion_percent / 100.0)
             floating_volume = month_consumption - hedged_volume
 
-            # Hedged portion cost
             cost_hedged = hedged_volume * (hedge_fixed_rate + admin_fee)
-            # Floating portion cost
             cost_floating = floating_volume * (w_rate + admin_fee)
-
             cost_client = cost_hedged + cost_floating
         else:
-            # No hedge => entire volume at (wholesale + admin_fee)
             cost_client = month_consumption * (w_rate + admin_fee)
 
+        monthly_cost_utility.append(cost_utility)
         monthly_cost_client.append(cost_client)
 
-    # 12. Summaries in cents
+    # Summaries in cents
     total_utility = sum(monthly_cost_utility)
     total_client = sum(monthly_cost_client)
 
@@ -199,22 +186,21 @@ def main():
     utility_dollars = total_utility / 100
     client_dollars = total_client / 100
 
-    # 13. Reporting
+    # 12. Reporting
     st.header("Cost Comparison Report (CAD)")
-    colA, colB = st.columns(2)
 
+    colA, colB = st.columns(2)
     colA.metric("Utility Cost (CAD)", f"${utility_dollars:,.2f}")
     colB.metric("Client Cost (CAD)", f"${client_dollars:,.2f}")
 
     diff_utility_vs_client = utility_dollars - client_dollars
-
     st.write("### Difference in Total Cost (CAD)")
     st.write(f"**Utility - Client**: ${diff_utility_vs_client:,.2f}")
 
     if diff_utility_vs_client > 0:
-        st.success(f"You would have **saved** ${diff_utility_vs_client:,.2f} by using the Client Cost (vs. Utility).")
+        st.success(f"You would have saved ${diff_utility_vs_client:,.2f} by using the Client Cost (vs. Utility).")
     elif diff_utility_vs_client < 0:
-        st.error(f"You would have spent an **extra** ${-diff_utility_vs_client:,.2f} using the Client Cost (vs. Utility).")
+        st.error(f"You would have spent ${-diff_utility_vs_client:,.2f} more by using the Client Cost (vs. Utility).")
     else:
         st.info("No difference between Utility and Client Cost.")
 
@@ -238,7 +224,7 @@ def main():
 
     monthly_df = pd.DataFrame(monthly_display)
 
-    # 14. Show monthly bar chart (grouped) if selected
+    # 13. Show monthly bar chart (grouped) if selected
     if show_monthly_chart and not monthly_df.empty:
         st.write("### Monthly Bar Chart of Costs (CAD)")
 
@@ -253,7 +239,7 @@ def main():
             x=alt.X("Month:N", sort=None, title="Month"),
             y=alt.Y("Cost (CAD):Q", title="Cost in CAD"),
             color=alt.Color("Scenario:N", legend=alt.Legend(title="Scenario")),
-            xOffset="Scenario:N"  # side-by-side grouping
+            xOffset="Scenario:N"
         ).properties(
             width=600,
             height=400
@@ -261,7 +247,7 @@ def main():
 
         st.altair_chart(chart, use_container_width=True)
 
-    # 15. Show monthly cost table if selected
+    # 14. Show monthly cost table if selected
     if show_monthly_table and not monthly_df.empty:
         st.write("### Monthly Costs & Differences Table (CAD)")
 
