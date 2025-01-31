@@ -105,7 +105,7 @@ def main():
         hedge_end_ts = None
 
     # 7. Load Historical Rate Data (now referencing "historical_data_ON_gas.csv")
-    csv_path = "/workspaces/blank-app/historical_data_ON_gas.csv"  # <-- Adjusted filename
+    csv_path = "/workspaces/blank-app/market-data/historical_data_ON_gas.csv"  # <-- Adjusted filename
     try:
         df = pd.read_csv(csv_path, parse_dates=["date"])
     except FileNotFoundError:

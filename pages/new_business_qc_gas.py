@@ -30,26 +30,26 @@ def main():
     # 1. Load Historical Rate Data
     # -------------------------------
     st.header("Historical Rate Data")
-    csv_path = "historical_data_QC_gas.csv"
+    csv_path = "/workspaces/blank-app/market-data/historical_data_AB_ele.csv"
     try:
-        df_rates_temp = pd.read_csv(csv_path, parse_dates=["date"])
+        df = pd.read_csv(csv_path, parse_dates=["date"])
     except FileNotFoundError:
-        st.error(f"Could not find '{csv_path}'. Please ensure the file exists in the specified path.")
+        st.error(f"Could not find '{csv_path}'. Please ensure the file exists at that path.")
         st.stop()
-    
-    required_cols = {"date", "utility_rate", "wholesale_rate"}
-    if not required_cols.issubset(df_rates_temp.columns):
-        st.error(f"CSV is missing required columns. Expected columns: {required_cols}")
+
+    required_columns = {"date", "regulated_rate", "wholesale_rate"}
+    if not required_columns.issubset(df.columns):
+        st.error(f"CSV is missing required columns. Expected columns: {required_columns}")
         st.stop()
-    
+
     # Determine min/max date from CSV
-    min_date = df_rates_temp["date"].min().date()
-    max_date = df_rates_temp["date"].max().date()
-    
+    min_date = df["date"].min().date()
+    max_date = df["date"].max().date()
+
     st.subheader("Reference Data (Preview)")
     st.write("Below is a quick preview of the loaded historical data:")
-    st.dataframe(df_rates_temp.head())
-    
+    st.dataframe(df.head())
+
     # -------------------------------
     # 2. Date Range Selection and Admin Fee
     # -------------------------------
