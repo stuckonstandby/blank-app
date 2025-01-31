@@ -35,12 +35,15 @@ st.image("assets/portfoliopartnerslogo.png", width=800)
 
 def get_data_path(filename):
     """
-    Returns the absolute path to a data file using the repository root.
-    Assumes that your repository structure is such that this script is in a 'pages' folder
-    and your data files are in a 'data' folder at the repository root.
+    Returns the absolute path to a data file.
+    If the filename is 'client_data_by_site.csv', assume it is in the repository root.
+    Otherwise, assume it is in the 'data' folder at the repository root.
     """
     BASE_DIR = Path(__file__).resolve().parent.parent
-    return str(BASE_DIR / "data" / filename)
+    if filename == "client_data_by_site.csv":
+        return str(BASE_DIR / filename)
+    else:
+        return str(BASE_DIR / "data" / filename)
 
 def get_rates_csv(province, commodity):
     """
