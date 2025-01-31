@@ -2,11 +2,8 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
-from pages import current_client, new_business # Import your page files
+from pages import current_client, new_business_on_gas # Import your page files
 
-import tkinter as tk
-
-import streamlit as st
 
 # Define the homepage
 def app():
