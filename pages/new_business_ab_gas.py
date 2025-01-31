@@ -22,7 +22,7 @@ def main():
 
     # 1. Load Historical Rate Data (so we can limit date range)
 
-    csv_path = "/workspaces/blank-app/market-data/historical_data_AB_gas.csv"
+    csv_path = "market-data/historical_data_AB_gas.csv"
     try:
         df = pd.read_csv(csv_path, parse_dates=["date"])
     except FileNotFoundError:

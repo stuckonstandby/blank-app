@@ -30,7 +30,7 @@ def main():
     # 1. Load Historical Rate Data
     # -------------------------------
     st.header("Historical Rate Data")
-    csv_path = "/workspaces/blank-app/market-data/historical_data_QC_gas.csv"
+    csv_path = "market-data/historical_data_QC_gas.csv"
     try:
         df = pd.read_csv(csv_path, parse_dates=["date"])
     except FileNotFoundError:
@@ -192,7 +192,7 @@ def main():
     # -------------------------------
     # 10. Validate Historical Rate Columns
     # -------------------------------
-    if not required_cols.issubset(df_rates.columns):
+    if not required_columns.issubset(df_rates.columns):
         st.error(f"Historical rates file '{csv_path}' must contain columns: {required_cols}")
         st.stop()
     
