@@ -1,13 +1,18 @@
-###update so that no admin fee gets added to hedges
-
-
 import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
+from pathlib import Path
 
-# Display a logo (optional)
-st.image("assets/capitalmarketslogo.png", width=400)
+# Establish the repository root (assumes this file is in a 'pages' folder)
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Build paths relative to the repository root.
+logo_path = BASE_DIR / "assets" / "capitalmarketslogo.png"
+csv_path = BASE_DIR / "market-data" / "historical_data_ON_gas.csv"
+
+# Display the logo using the absolute path.
+st.image(str(logo_path), width=400)
 
 def main():
     st.title("Market Performance Simulator (CAD) - Manual Input")
@@ -73,7 +78,7 @@ def main():
         )
         hedge_start_date_input = st.date_input(
             "Hedge Start Date",
-            value=start_date_input,  # default to main start
+            value=start_date_input,  # default to main start date
             min_value=start_date_input,
             max_value=end_date_input
         )
@@ -87,7 +92,6 @@ def main():
 
     # 6. Submit button
     submitted = st.button("Submit", type="primary")
-
     if not submitted:
         st.stop()
 
@@ -104,10 +108,9 @@ def main():
         hedge_start_ts = None
         hedge_end_ts = None
 
-    # 7. Load Historical Rate Data (now referencing "historical_data_ON_gas.csv")
-    csv_path = "market-data/historical_data_ON_gas.csv"  # <-- Adjusted filename
+    # 7. Load Historical Rate Data
     try:
-        df = pd.read_csv(csv_path, parse_dates=["date"])
+        df = pd.read_csv(str(csv_path), parse_dates=["date"])
     except FileNotFoundError:
         st.error(f"Could not find '{csv_path}'. Please ensure the file exists at that path.")
         st.stop()
@@ -123,7 +126,6 @@ def main():
     # 8. Filter data by user-specified date range
     mask = (df["date"] >= start_ts) & (df["date"] <= end_ts)
     df_filtered = df.loc[mask].copy()
-
     if df_filtered.empty:
         st.warning("No rate data found for the selected date range. Please adjust your dates or check your CSV.")
         st.stop()
@@ -144,7 +146,7 @@ def main():
             "utility_selected": "mean"
         })
     )
-    # Convert to Timestamp
+    # Convert year_month from period to timestamp for plotting and calculations
     monthly_rates["year_month"] = monthly_rates["year_month"].apply(lambda x: x.start_time)
     monthly_rates.sort_values("year_month", inplace=True)
     monthly_rates.reset_index(drop=True, inplace=True)
@@ -164,16 +166,17 @@ def main():
         mnum = month_datetime.month
         month_consumption = consumption[mnum]
 
-        # Utility Cost
+        # Utility Cost calculation
         cost_utility = month_consumption * utility_rate
 
-        # Client Cost (Wholesale + Admin Fee, partial hedge if applicable)
+        # Client Cost calculation (Wholesale + Admin Fee, partial hedge if applicable)
         if use_hedge and hedge_start_ts and (hedge_start_ts <= month_datetime < hedge_end_ts):
-            # Hedge portion
+            # Calculate hedged and floating portions
             hedged_volume = month_consumption * (hedge_portion_percent / 100.0)
             floating_volume = month_consumption - hedged_volume
 
-            cost_hedged = hedged_volume * (hedge_fixed_rate + admin_fee)
+            # For hedged volume, do NOT add the admin fee.
+            cost_hedged = hedged_volume * hedge_fixed_rate  
             cost_floating = floating_volume * (w_rate + admin_fee)
             cost_client = cost_hedged + cost_floating
         else:
@@ -186,13 +189,12 @@ def main():
     total_utility = sum(monthly_cost_utility)
     total_client = sum(monthly_cost_client)
 
-    # Convert to dollars (CAD)
+    # Convert cents to dollars (CAD)
     utility_dollars = total_utility / 100
     client_dollars = total_client / 100
 
     # 12. Reporting
     st.header("Cost Comparison Report (CAD)")
-
     colA, colB = st.columns(2)
     colA.metric("Utility Cost (CAD)", f"${utility_dollars:,.2f}")
     colB.metric("Client Cost (CAD)", f"${client_dollars:,.2f}")
@@ -231,14 +233,12 @@ def main():
     # 13. Show monthly bar chart (grouped) if selected
     if show_monthly_chart and not monthly_df.empty:
         st.write("### Monthly Bar Chart of Costs (CAD)")
-
         chart_data = monthly_df.melt(
             id_vars="Month",
             value_vars=["Utility Cost (CAD)", "Client Cost (CAD)"],
             var_name="Scenario",
             value_name="Cost (CAD)"
         )
-
         chart = alt.Chart(chart_data).mark_bar().encode(
             x=alt.X("Month:N", sort=None, title="Month"),
             y=alt.Y("Cost (CAD):Q", title="Cost in CAD"),
@@ -248,13 +248,11 @@ def main():
             width=600,
             height=400
         )
-
         st.altair_chart(chart, use_container_width=True)
 
     # 14. Show monthly cost table if selected
     if show_monthly_table and not monthly_df.empty:
         st.write("### Monthly Costs & Differences Table (CAD)")
-
         format_dict = {
             "Utility Cost (CAD)": "{:,.2f}",
             "Client Cost (CAD)": "{:,.2f}",
@@ -262,7 +260,6 @@ def main():
         }
         existing_cols = list(monthly_df.columns)
         formatable_cols = {col: format_dict[col] for col in existing_cols if col in format_dict}
-
         st.dataframe(monthly_df.style.format(formatable_cols))
 
 if __name__ == "__main__":
