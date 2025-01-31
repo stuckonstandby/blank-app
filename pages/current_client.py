@@ -3,6 +3,7 @@ import pandas as pd
 import altair as alt
 from datetime import datetime
 import hmac
+import os  # Import os module
 
 ## checks password
 def check_password():
@@ -42,7 +43,7 @@ def main():
     """)
 
     #### 1. Load the client site-level CSV ####
-    csv_path_client = "client_data_by_site.csv"
+    csv_path_client = get_data_path("client_data_by_site.csv")
     try:
         client_df = pd.read_csv(csv_path_client)
     except FileNotFoundError:
@@ -233,9 +234,15 @@ def main():
             st.error(f"No rate file rule for province={province}, commodity={commodity}")
             st.stop()
 
+    def get_data_path(filename):
+        """Returns the absolute path to a data file based on the current script's location."""
+        current_dir = os.path.dirname(__file__)
+        data_dir = os.path.join(current_dir, 'data')
+        return os.path.join(data_dir, filename)
+
     rates_csv = get_rates_csv(chosen_province, chosen_commodity)
     try:
-        df_rates = pd.read_csv(rates_csv, parse_dates=["date"])
+        df_rates = pd.read_csv(get_data_path(rates_csv), parse_dates=["date"])
     except FileNotFoundError:
         st.error(f"Could not find rates file '{rates_csv}'. Check your files.")
         st.stop()
