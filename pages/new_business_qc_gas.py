@@ -30,7 +30,7 @@ def main():
     # 1. Load Historical Rate Data
     # -------------------------------
     st.header("Historical Rate Data")
-    csv_path = "/workspaces/blank-app/market-data/historical_data_AB_ele.csv"
+    csv_path = "/workspaces/blank-app/market-data/historical_data_QC_gas.csv"
     try:
         df = pd.read_csv(csv_path, parse_dates=["date"])
     except FileNotFoundError:
