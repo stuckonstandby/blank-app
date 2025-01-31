@@ -21,21 +21,14 @@ def main():
     """)
 
     # 1. Load Historical Rate Data (so we can limit date range)
-    # Use relative path to ensure compatibility across environments
-    csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'historical_data_AB_gas.csv')
-    
-    # Verify that the CSV file exists
-    if not os.path.exists(csv_path):
-        st.error(f"Could not find '{csv_path}'. Please ensure the file exists at that path.")
-        st.stop()
-    
+
+   csv_path = "/workspaces/blank-app/market-data/historical_data_AB_gas.csv"
     try:
         df = pd.read_csv(csv_path, parse_dates=["date"])
-    except Exception as e:
-        st.error(f"Error reading the CSV file: {e}")
+    except FileNotFoundError:
+        st.error(f"Could not find '{csv_path}'. Please ensure the file exists at that path.")
         st.stop()
 
-    # Check for required columns
     required_columns = {"date", "regulated_rate", "wholesale_rate"}
     if not required_columns.issubset(df.columns):
         st.error(f"CSV is missing required columns. Expected columns: {required_columns}")
@@ -54,24 +47,24 @@ def main():
     col1, col2, col3 = st.columns(3)
     with col1:
         start_date_input = st.date_input(
-            "Start Date",
-            value=min_date,
-            min_value=min_date,
+            "Start Date", 
+            value=min_date, 
+            min_value=min_date, 
             max_value=max_date
         )
     with col2:
         end_date_input = st.date_input(
-            "End Date",
-            value=max_date,
-            min_value=min_date,
+            "End Date", 
+            value=max_date, 
+            min_value=min_date, 
             max_value=max_date
         )
     with col3:
         admin_fee = st.number_input(
-            "Admin Fee ($/GJ)",
+            "Admin Fee (cents/kWh)",
             min_value=0.0,
-            step=0.05,
-            format="%.4f"
+            step=0.1,
+            format="%.2f"
         )
 
     # 3. Monthly Consumption (Manual)
