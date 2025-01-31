@@ -1,1 +1,6 @@
 streamlit
+hmac
+altair
+datetime
+pandas
+re
