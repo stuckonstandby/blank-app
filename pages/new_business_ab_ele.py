@@ -1,11 +1,19 @@
-###update so that no admin fee gets added to hedges
-
 import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
+from pathlib import Path
 
-st.image("assets/capitalmarketslogo.png", width=400)
+# Determine the repository root relative to this file.
+# __file__ is the current file, so its parent is 'pages', and its parent is the repo root.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Build paths relative to the repository root.
+logo_path = BASE_DIR / "assets" / "capitalmarketslogo.png"
+csv_path = BASE_DIR / "market-data" / "historical_data_AB_ele.csv"
+
+# Use the computed path for the image.
+st.image(str(logo_path), width=400)
 
 def main():
     st.title("Alberta Electricity Market Simulator (CAD) - Manual Input")
@@ -20,7 +28,6 @@ def main():
     """)
 
     # 1. Load Historical Rate Data (so we can limit date range)
-    csv_path = "market-data/historical_data_AB_ele.csv"
     try:
         df = pd.read_csv(csv_path, parse_dates=["date"])
     except FileNotFoundError:
