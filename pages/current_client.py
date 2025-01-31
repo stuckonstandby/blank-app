@@ -3,9 +3,10 @@ import pandas as pd
 import altair as alt
 from datetime import datetime
 import hmac
-import os  # Import os module
+import os
+from pathlib import Path
 
-## checks password
+## Password check remains unchanged.
 def check_password():
     """Returns `True` if the user had the correct password."""
     def password_entered():
@@ -24,13 +25,38 @@ def check_password():
         st.error("😕 Password incorrect")
     return False
 
-
 if not check_password():
     st.stop()
 
-# Actual Program
+# Display the logo
 st.image("assets/portfoliopartnerslogo.png", width=800)
 
+# --- Helper Functions ---
+
+def get_data_path(filename):
+    """
+    Returns the absolute path to a data file using the repository root.
+    Assumes that your repository structure is such that this script is in a 'pages' folder
+    and your data files are in a 'data' folder at the repository root.
+    """
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    return str(BASE_DIR / "data" / filename)
+
+def get_rates_csv(province, commodity):
+    """
+    Returns the appropriate CSV filename based on the province and commodity.
+    """
+    if province == "Alberta" and commodity == "gas":
+        return "historical_data_AB_gas.csv"
+    elif province == "Alberta" and commodity == "electricity":
+        return "historical_data_AB_ele.csv"
+    elif province == "Ontario" and commodity == "gas":
+        return "historical_data_ON_gas.csv"
+    else:
+        st.error(f"No rate file rule for province={province}, commodity={commodity}")
+        st.stop()
+
+# --- Main Application Function ---
 def main():
     st.title("Market Performance Simulator (CAD) - Existing Clients (Multi-Site)")
 
@@ -53,8 +79,8 @@ def main():
     expected_cols = {
         "client_name", "site_ID", "province", "commodity",
         "contract_start_date", "client_admin_fee",
-        "January","February","March","April","May","June",
-        "July","August","September","October","November","December"
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
     }
     if not expected_cols.issubset(client_df.columns):
         st.error(f"The file '{csv_path_client}' is missing required columns: {expected_cols}")
@@ -106,15 +132,16 @@ def main():
     import numpy as np
 
     if analysis_mode == "Aggregate All Sites":
-        month_cols = ["January","February","March","April","May","June",
-                      "July","August","September","October","November","December"]
+        month_cols = ["January", "February", "March", "April", "May", "June",
+                      "July", "August", "September", "October", "November", "December"]
         earliest_start = final_subset["contract_start_date"].min()
         avg_admin_fee = final_subset["client_admin_fee"].mean()
         usage_sums = final_subset[month_cols].sum(numeric_only=True)
 
         month_map = {
-            1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
-            7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
+            1: "January", 2: "February", 3: "March", 4: "April",
+            5: "May", 6: "June", 7: "July", 8: "August",
+            9: "September", 10: "October", 11: "November", 12: "December"
         }
         consumption = {}
         for i in range(1, 13):
@@ -132,8 +159,9 @@ def main():
         site_row = final_subset[final_subset["site_ID"] == chosen_site].iloc[0]
 
         month_map = {
-            1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
-            7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
+            1: "January", 2: "February", 3: "March", 4: "April",
+            5: "May", 6: "June", 7: "July", 8: "August",
+            9: "September", 10: "October", 11: "November", 12: "December"
         }
         consumption = {}
         for i in range(1, 13):
@@ -211,7 +239,7 @@ def main():
     if not submitted:
         st.stop()
 
-    # Post-submit
+    # Post-submit processing of dates
     start_ts = pd.to_datetime(start_date_input)
     end_ts = pd.to_datetime(end_date_input)
 
@@ -222,24 +250,7 @@ def main():
         hedge_start_ts = None
         hedge_end_ts = None
 
-    # 6. Pick the appropriate CSV
-    def get_rates_csv(province, commodity):
-        if province == "Alberta" and commodity == "gas":
-            return "historical_data_AB_gas.csv"
-        elif province == "Alberta" and commodity == "electricity":
-            return "historical_data_AB_ele.csv"
-        elif province == "Ontario" and commodity == "gas":
-            return "historical_data_ON_gas.csv"
-        else:
-            st.error(f"No rate file rule for province={province}, commodity={commodity}")
-            st.stop()
-
-    def get_data_path(filename):
-        """Returns the absolute path to a data file based on the current script's location."""
-        current_dir = os.path.dirname(__file__)
-        data_dir = os.path.join(current_dir, 'data')
-        return os.path.join(data_dir, filename)
-
+    # 6. Pick the appropriate CSV for rates and load it using get_data_path
     rates_csv = get_rates_csv(chosen_province, chosen_commodity)
     try:
         df_rates = pd.read_csv(get_data_path(rates_csv), parse_dates=["date"])
@@ -247,16 +258,14 @@ def main():
         st.error(f"Could not find rates file '{rates_csv}'. Check your files.")
         st.stop()
 
-    # Alberta: date, regulated_rate, wholesale_rate
-    # Ontario: date, wholesale_rate, local_utility_rate_egd, local_utility_rate_usouth
+    # Check required columns in the rates file.
     if chosen_province == "Alberta":
-        needed_cols = {"date","regulated_rate","wholesale_rate"}
+        needed_cols = {"date", "regulated_rate", "wholesale_rate"}
         if not needed_cols.issubset(df_rates.columns):
             st.error(f"Rates file '{rates_csv}' must have columns: {needed_cols}")
             st.stop()
     else:
-        # Ontario
-        needed_cols = {"date","wholesale_rate","local_utility_rate_egd","local_utility_rate_usouth"}
+        needed_cols = {"date", "wholesale_rate", "local_utility_rate_egd", "local_utility_rate_usouth"}
         if not needed_cols.issubset(df_rates.columns):
             st.error(f"Rates file '{rates_csv}' must have columns: {needed_cols}")
             st.stop()
@@ -264,19 +273,17 @@ def main():
     st.subheader("Reference Data (Preview)")
     st.dataframe(df_rates.head())
 
-    # Filter date range
+    # Filter rates to the selected date range.
     mask = (df_rates["date"] >= start_ts) & (df_rates["date"] <= end_ts)
     df_filtered = df_rates.loc[mask].copy()
     if df_filtered.empty:
         st.warning("No rate data in that date range.")
         st.stop()
 
-    # Build "utility_selected"
+    # Build "utility_selected" column.
     if chosen_province == "Alberta":
-        # Utility cost is the regulated_rate column
         df_filtered["utility_selected"] = df_filtered["regulated_rate"]
     else:
-        # Ontario => EGD or Union
         if not local_utility_choice:
             st.error("Ontario gas requires selecting EGD or Union South.")
             st.stop()
@@ -285,11 +292,10 @@ def main():
         else:
             df_filtered["utility_selected"] = df_filtered["local_utility_rate_usouth"]
 
-    # Group monthly
+    # Group monthly.
     df_filtered["year_month"] = df_filtered["date"].dt.to_period("M")
     monthly_rates = (
-        df_filtered
-        .groupby("year_month", as_index=False)
+        df_filtered.groupby("year_month", as_index=False)
         .agg({
             "wholesale_rate": "mean",
             "utility_selected": "mean"
@@ -302,11 +308,11 @@ def main():
     st.write("**Averaged monthly data (filtered by date range):**")
     st.dataframe(monthly_rates.head())
 
-    # Convert usage * rate to CAD, depends on AB vs ON, gas vs electricity
+    # Function to compute cost in CAD.
     def cost_in_cad(usage_value, rate_value, province, commodity):
-        # AB gas => $/GJ => usage * rate
-        # AB ele => cents/kWh => usage * (rate / 100)
-        # ON gas => cents/m³ => usage * (rate / 100)
+        # AB gas: usage * rate ($/GJ)
+        # AB electricity: usage * (rate in cents/kWh / 100)
+        # ON gas: usage * (rate in cents/m³ / 100)
         if province == "Alberta" and commodity == "gas":
             return usage_value * rate_value
         elif province == "Alberta" and commodity == "electricity":
@@ -314,7 +320,7 @@ def main():
         elif province == "Ontario" and commodity == "gas":
             return usage_value * (rate_value / 100.0)
         else:
-            st.error(f"No cost calc rule for {province}, {commodity}")
+            st.error(f"No cost calculation rule for {province}, {commodity}")
             st.stop()
 
     monthly_cost_utility = []
@@ -328,25 +334,20 @@ def main():
         mnum = pd.Timestamp(month_dt).month
         usage_val = consumption[mnum]
 
-        # Utility cost => usage * utility rate
+        # Calculate utility cost.
         util_cost = cost_in_cad(usage_val, u_rate, chosen_province, chosen_commodity)
 
-        # Client cost => portion hedged at (hedge_fixed_rate, no admin fee),
-        #                remainder at (w_rate + admin_fee)
+        # Calculate client cost.
         if use_hedge and hedge_start_ts and (hedge_start_ts <= month_dt < hedge_end_ts):
-            # hedged portion
             hedged_vol = usage_val * (hedge_portion_percent / 100.0)
             floating_vol = usage_val - hedged_vol
 
-            # Hedge is all-in, no admin fee added
+            # Hedged volume: hedge_fixed_rate applies without an extra admin fee.
             cost_hedged = cost_in_cad(hedged_vol, hedge_fixed_rate, chosen_province, chosen_commodity)
-
-            # Unhedged => (wholesale + admin_fee)
+            # Floating volume: use (wholesale rate + admin fee).
             cost_floating = cost_in_cad(floating_vol, w_rate + final_admin_fee, chosen_province, chosen_commodity)
-
             c_cost = cost_hedged + cost_floating
         else:
-            # fully unhedged => (wholesale + admin_fee)
             combined = w_rate + final_admin_fee
             c_cost = cost_in_cad(usage_val, combined, chosen_province, chosen_commodity)
 
@@ -372,7 +373,7 @@ def main():
     else:
         st.info("No difference between Utility and Client Cost.")
 
-    # Prepare monthly breakdown
+    # Prepare monthly breakdown.
     monthly_display = []
     for i, row_m in enumerate(monthly_rates.itertuples()):
         date_label = row_m.year_month
