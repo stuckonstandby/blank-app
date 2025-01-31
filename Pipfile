@@ -9,7 +9,6 @@ hmac = "*"
 altair = "*"
 datetime = "*"
 pandas = "*"
-re = "*"
 
 [dev-packages]
 
