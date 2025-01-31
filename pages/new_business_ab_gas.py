@@ -1,12 +1,11 @@
-###update so that no admin fee gets added to hedges
-
-
+# Import necessary libraries
 import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
 import os
 
+# Display the logo
 st.image("assets/capitalmarketslogo.png", width=400)
 
 def main():
@@ -22,13 +21,21 @@ def main():
     """)
 
     # 1. Load Historical Rate Data (so we can limit date range)
-    csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'historical_data_AB_ele.csv')
-    try:
-        df = pd.read_csv(csv_path, parse_dates=["date"])
-    except FileNotFoundError:
+    # Use relative path to ensure compatibility across environments
+    csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'historical_data_AB_gas.csv')
+    
+    # Verify that the CSV file exists
+    if not os.path.exists(csv_path):
         st.error(f"Could not find '{csv_path}'. Please ensure the file exists at that path.")
         st.stop()
+    
+    try:
+        df = pd.read_csv(csv_path, parse_dates=["date"])
+    except Exception as e:
+        st.error(f"Error reading the CSV file: {e}")
+        st.stop()
 
+    # Check for required columns
     required_columns = {"date", "regulated_rate", "wholesale_rate"}
     if not required_columns.issubset(df.columns):
         st.error(f"CSV is missing required columns. Expected columns: {required_columns}")
@@ -179,10 +186,10 @@ def main():
 
         # Client Cost (Wholesale + Admin Fee, partial hedge if applicable)
         if use_hedge and hedge_start_ts and (hedge_start_ts <= month_datetime < hedge_end_ts):
-            # Hedge portion
+            # Hedge portion without admin fee
             hedged_volume = month_consumption * (hedge_portion_percent / 100.0)
             floating_volume = month_consumption - hedged_volume
-            cost_hedged = hedged_volume * (hedge_fixed_rate + admin_fee)  # dollars
+            cost_hedged = hedged_volume * hedge_fixed_rate  # dollars (no admin fee)
             cost_floating = floating_volume * (whl_rate + admin_fee)      # dollars
             cost_client = cost_hedged + cost_floating
         else:
