@@ -23,7 +23,7 @@ def main():
     # 1. Load Historical Rate Data (so we can limit date range)
 
    csv_path = "/workspaces/blank-app/market-data/historical_data_AB_gas.csv"
-    try:
+   try:
         df = pd.read_csv(csv_path, parse_dates=["date"])
     except FileNotFoundError:
         st.error(f"Could not find '{csv_path}'. Please ensure the file exists at that path.")
