@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
+import os
 
 st.image("assets/capitalmarketslogo.png", width=400)
 
@@ -21,7 +22,7 @@ def main():
     """)
 
     # 1. Load Historical Rate Data (so we can limit date range)
-    csv_path = "/workspaces/blank-app/historical_data_AB_gas.csv"
+    csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'historical_data_AB_ele.csv')
     try:
         df = pd.read_csv(csv_path, parse_dates=["date"])
     except FileNotFoundError:
