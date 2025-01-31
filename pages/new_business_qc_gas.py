@@ -37,7 +37,7 @@ def main():
         st.error(f"Could not find '{csv_path}'. Please ensure the file exists at that path.")
         st.stop()
 
-    required_columns = {"date", "regulated_rate", "wholesale_rate"}
+    required_columns = {"date", "utility_rate", "wholesale_rate"}
     if not required_columns.issubset(df.columns):
         st.error(f"CSV is missing required columns. Expected columns: {required_columns}")
         st.stop()
