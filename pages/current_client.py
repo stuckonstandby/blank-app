@@ -35,13 +35,16 @@ st.image("assets/portfoliopartnerslogo.png", width=800)
 
 def get_data_path(filename):
     """
-    Returns the absolute path to a data file.
-    If the filename is 'client_data_by_site.csv', assume it is in the repository root.
-    Otherwise, assume it is in the 'data' folder at the repository root.
+    Returns the absolute path to a data file based on its expected location:
+      - If the file is "client_data_by_site.csv", it is assumed to be in the repository root.
+      - If the filename starts with "historical_", it is assumed to be in the 'market-data' folder.
+      - Otherwise, the file is assumed to be in a 'data' folder at the repository root.
     """
     BASE_DIR = Path(__file__).resolve().parent.parent
     if filename == "client_data_by_site.csv":
         return str(BASE_DIR / filename)
+    elif filename.startswith("historical_"):
+        return str(BASE_DIR / "market-data" / filename)
     else:
         return str(BASE_DIR / "data" / filename)
 
