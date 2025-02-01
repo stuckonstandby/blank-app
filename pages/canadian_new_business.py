@@ -1,5 +1,3 @@
-# analysis.py
-
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -95,8 +93,8 @@ def main():
         client_df = load_csv(client_csv, {
             "client_name", "site_ID", "province", "commodity",
             "contract_start_date", "client_admin_fee",
-            "January","February","March","April","May","June",
-            "July","August","September","October","November","December"
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
         })
 
         st.image("assets/portfoliopartnerslogo.png", width=800)
@@ -147,15 +145,16 @@ def main():
         )
 
         if analysis_mode == "Aggregate All Sites":
-            month_cols = ["January","February","March","April","May","June",
-                          "July","August","September","October","November","December"]
+            month_cols = ["January", "February", "March", "April", "May", "June",
+                          "July", "August", "September", "October", "November", "December"]
             earliest_start = final_subset["contract_start_date"].min()
             avg_admin_fee = final_subset["client_admin_fee"].mean()
             usage_sums = final_subset[month_cols].sum(numeric_only=True)
 
             month_map = {
-                1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
-                7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
+                1: "January", 2: "February", 3: "March", 4: "April",
+                5: "May", 6: "June", 7: "July", 8: "August",
+                9: "September", 10: "October", 11: "November", 12: "December"
             }
             consumption = {}
             for i in range(1, 13):
@@ -169,4 +168,15 @@ def main():
             st.write(f"**Average Admin Fee**: {final_admin_fee}")
         else:
             all_site_ids = sorted(final_subset["site_ID"].unique())
-            chosen_site = st.selectbox("Select Site ID:", all_sit
+            # Corrected the selectbox line below:
+            chosen_site = st.selectbox("Select Site ID:", all_site_ids)
+
+            # Additional code for handling the single site workflow would follow here...
+
+    else:
+        # --- New Business Workflow ---
+        st.header("Market Performance Simulator (CAD) - New Business")
+        # Your new business code would go here...
+
+if __name__ == "__main__":
+    main()
