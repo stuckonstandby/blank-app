@@ -29,6 +29,8 @@ def get_rates_csv(province, commodity):
         return "historical_data_AB_ele.csv"
     elif province == "Ontario" and commodity == "gas":
         return "historical_data_ON_gas.csv"
+    elif province == "Quebec" and commodity == "gas":
+        return "historical_data_QC_gas.csv"
     else:
         st.error(f"No rate file rule for province={province}, commodity={commodity}")
         st.stop()
@@ -38,13 +40,13 @@ def cost_in_cad(usage, rate, province, commodity):
     A simple cost calculation:
       - For Alberta gas: cost = usage * rate
       - For Alberta electricity: cost = usage * (rate / 100)
-      - For Ontario (gas): cost = usage * (rate / 100)
+      - For Ontario and Quebec gas: cost = usage * (rate / 100)
     """
     if province == "Alberta" and commodity == "gas":
         return usage * rate
     elif province == "Alberta" and commodity == "electricity":
         return usage * (rate / 100.0)
-    elif province == "Ontario" and commodity == "gas":
+    elif (province == "Ontario" or province == "Quebec") and commodity == "gas":
         return usage * (rate / 100.0)
     else:
         st.error(f"No cost calculation rule for {province}, {commodity}")
@@ -56,23 +58,28 @@ def main():
     st.title("Market Performance Simulator (CAD) - New Business")
     st.write("This tool simulates market performance for new business scenarios based on manually supplied consumer data.")
     
+    # If clear_results flag is set, do not show simulation results.
+    if "clear_results" not in st.session_state:
+        st.session_state.clear_results = False
+
     with st.form("new_business_form"):
         # --- Section 1: Market Information ---
         st.subheader("Market Information")
         col1, col2 = st.columns(2)
-        selected_province = col1.selectbox("Select Province:", ["Alberta", "Ontario"])
+        selected_province = col1.selectbox("Select Province:", ["Alberta", "Ontario", "Quebec"], key="selected_province")
         if selected_province == "Alberta":
             commodity_options = ["gas", "electricity"]
         else:
-            commodity_options = ["gas"]  # Adjust if Ontario electricity is supported.
-        selected_commodity = col2.selectbox("Select Commodity:", commodity_options)
+            # For Ontario and Quebec, only gas is supported.
+            commodity_options = ["gas"]
+        selected_commodity = col2.selectbox("Select Commodity:", commodity_options, key="selected_commodity")
         
         # --- Section 2: Simulation Details ---
         st.subheader("Simulation Details")
         col1, col2 = st.columns(2)
-        simulation_start = col1.date_input("Simulation Start Date", value=datetime(2023, 1, 1))
-        simulation_end = col2.date_input("Simulation End Date", value=datetime(2023, 12, 31), min_value=simulation_start)
-        admin_fee = st.number_input("Admin Fee", min_value=0.0, step=0.1, format="%.2f")
+        simulation_start = col1.date_input("Simulation Start Date", value=datetime(2023, 1, 1), key="simulation_start")
+        simulation_end = col2.date_input("Simulation End Date", value=datetime(2023, 12, 31), min_value=simulation_start, key="simulation_end")
+        admin_fee = st.number_input("Admin Fee", min_value=0.0, step=0.1, format="%.2f", key="admin_fee")
         
         # --- Section 3: Monthly Consumption ---
         st.subheader("Monthly Consumption")
@@ -80,29 +87,37 @@ def main():
                        "July", "August", "September", "October", "November", "December"]
         consumption = {}
         for m in month_names:
-            consumption[m] = st.number_input(f"{m} Consumption", min_value=0.0, step=1.0, format="%.2f")
+            consumption[m] = st.number_input(f"{m} Consumption", min_value=0, step=1, format="%d", key=f"consumption_{m}")
         
         # --- Section 4: Hedge Options (Optional) ---
         st.subheader("Hedge Options (Optional)")
-        use_hedge = st.checkbox("Include Volumetric Hedge?")
+        use_hedge = st.checkbox("Include Volumetric Hedge?", key="use_hedge")
         hedge_portion_percent = 0.0
         hedge_start_date = None
         hedge_term_months = 0
         hedge_fixed_rate = 0.0
         if use_hedge:
-            hedge_portion_percent = st.number_input("Hedged Portion (%)", min_value=0.0, max_value=100.0, step=1.0, value=30.0)
-            hedge_start_date = st.date_input("Hedge Start Date", value=simulation_start, min_value=simulation_start, max_value=simulation_end)
-            hedge_term_months = st.number_input("Hedge Term (months)", min_value=0, value=6)
-            hedge_fixed_rate = st.number_input("Hedge Fixed Rate (All-Inclusive)", min_value=0.0, step=0.1, format="%.2f")
+            hedge_portion_percent = st.number_input("Hedged Portion (%)", min_value=0.0, max_value=100.0, step=1.0, value=30.0, key="hedge_portion_percent")
+            hedge_start_date = st.date_input("Hedge Start Date", value=simulation_start, min_value=simulation_start, max_value=simulation_end, key="hedge_start_date")
+            hedge_term_months = st.number_input("Hedge Term (months)", min_value=0, value=6, key="hedge_term_months")
+            hedge_fixed_rate = st.number_input("Hedge Fixed Rate (All-Inclusive)", min_value=0.0, step=0.1, format="%.2f", key="hedge_fixed_rate")
         
         # --- Section 5: Additional Options ---
         st.subheader("Additional Options")
-        show_monthly_chart = st.checkbox("Show monthly bar chart of costs?", value=True)
-        show_monthly_table = st.checkbox("Show monthly cost table & differences?", value=True)
+        show_monthly_chart = st.checkbox("Show monthly bar chart of costs?", value=True, key="show_monthly_chart")
+        show_monthly_table = st.checkbox("Show monthly cost table & differences?", value=True, key="show_monthly_table")
+        if selected_commodity == "gas":
+            equalize_consumption_checkbox = st.checkbox("Bundle-T Billing (Gas Only)", value=False, key="equalize_consumption")
+        else:
+            equalize_consumption_checkbox = False
         
         submitted = st.form_submit_button("Run Simulation")
     
+    # When form is (re)submitted, clear_results flag is reset.
     if submitted:
+        st.session_state.clear_results = False
+
+    if submitted and not st.session_state.clear_results:
         # Load historical rates.
         rates_csv = get_rates_csv(selected_province, selected_commodity)
         try:
@@ -119,10 +134,12 @@ def main():
             st.error("No historical rate data found in the selected date range.")
             st.stop()
         
-        # For Alberta, use regulated_rate; for Ontario, use a default utility rate column.
+        # Set utility rate column based on province.
         if selected_province == "Alberta":
             df_filtered["utility_selected"] = df_filtered["regulated_rate"]
-        else:
+        elif selected_province == "Quebec":
+            df_filtered["utility_selected"] = df_filtered["utility_rate"]
+        elif selected_province == "Ontario":
             df_filtered["utility_selected"] = df_filtered["local_utility_rate_egd"]
         
         # Group the historical data by month.
@@ -143,6 +160,10 @@ def main():
         for i, m in enumerate(month_names, start=1):
             consumption_by_num[i] = consumption[m]
         
+        # Compute uniform consumption if Bundle-T Billing is enabled.
+        if selected_commodity == "gas" and equalize_consumption_checkbox:
+            equal_consumption = sum(consumption_by_num.values()) / 12
+        
         # Calculate monthly costs.
         monthly_cost_utility = []
         monthly_cost_client = []
@@ -151,22 +172,28 @@ def main():
             w_rate = row["wholesale_rate"]
             u_rate = row["utility_selected"]
             mnum = pd.Timestamp(month_dt).month
-            usage_val = consumption_by_num[mnum]
-            util_cost = cost_in_cad(usage_val, u_rate, selected_province, selected_commodity)
-            # If hedge options are used, adjust client cost for months within the hedge period.
+            actual_usage = consumption_by_num[mnum]
+            # Utility cost always uses the actual consumption.
+            util_cost = cost_in_cad(actual_usage, u_rate, selected_province, selected_commodity)
+            # For client cost, use the equalized consumption if Bundle-T Billing is enabled.
+            if selected_commodity == "gas" and equalize_consumption_checkbox:
+                usage_val_client = equal_consumption
+            else:
+                usage_val_client = actual_usage
+            # Apply hedge adjustments if required.
             if use_hedge and hedge_start_date:
                 hedge_start_ts = pd.to_datetime(hedge_start_date)
                 hedge_end_ts = hedge_start_ts + pd.DateOffset(months=int(hedge_term_months))
                 if hedge_start_ts <= month_dt < hedge_end_ts:
-                    hedged_vol = usage_val * (hedge_portion_percent / 100.0)
-                    floating_vol = usage_val - hedged_vol
+                    hedged_vol = usage_val_client * (hedge_portion_percent / 100.0)
+                    floating_vol = usage_val_client - hedged_vol
                     cost_hedged = cost_in_cad(hedged_vol, hedge_fixed_rate, selected_province, selected_commodity)
                     cost_floating = cost_in_cad(floating_vol, w_rate + admin_fee, selected_province, selected_commodity)
                     client_cost = cost_hedged + cost_floating
                 else:
-                    client_cost = cost_in_cad(usage_val, w_rate + admin_fee, selected_province, selected_commodity)
+                    client_cost = cost_in_cad(usage_val_client, w_rate + admin_fee, selected_province, selected_commodity)
             else:
-                client_cost = cost_in_cad(usage_val, w_rate + admin_fee, selected_province, selected_commodity)
+                client_cost = cost_in_cad(usage_val_client, w_rate + admin_fee, selected_province, selected_commodity)
             monthly_cost_utility.append(util_cost)
             monthly_cost_client.append(client_cost)
         
@@ -229,6 +256,11 @@ def main():
             existing_cols = list(monthly_df.columns)
             formatable_cols = {col: format_dict[col] for col in existing_cols if col in format_dict}
             st.dataframe(monthly_df.style.format(formatable_cols))
+        
+        # Add a button to clear the results and return to the pre-submission state.
+        if st.button("Clear Results"):
+            st.session_state.clear_results = True
+            st.experimental_rerun()
 
 if __name__ == "__main__":
     main()
