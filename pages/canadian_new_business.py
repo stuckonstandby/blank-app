@@ -2,14 +2,26 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
+from pathlib import Path
 import os
-import hmac
 
 # --- Utility Functions ---
 
+def get_data_path(filename):
+    """
+    Returns the absolute path to a data file.
+      - If the filename starts with "historical_", it is assumed to be in the 'market-data' folder.
+      - Otherwise, the file is assumed to be in a 'data' folder at the repository root.
+    """
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    if filename.startswith("historical_"):
+        return str(BASE_DIR / "market-data" / filename)
+    else:
+        return str(BASE_DIR / "data" / filename)
+
 def get_rates_csv(province, commodity):
     """
-    Returns the CSV filename based on the province and commodity.
+    Returns the appropriate historical rates CSV filename based on province and commodity.
     """
     if province == "Alberta" and commodity == "gas":
         return "historical_data_AB_gas.csv"
@@ -17,166 +29,206 @@ def get_rates_csv(province, commodity):
         return "historical_data_AB_ele.csv"
     elif province == "Ontario" and commodity == "gas":
         return "historical_data_ON_gas.csv"
-    elif province == "Ontario" and commodity == "electricity":
-        return "historical_data_ON_ele.csv"
     else:
         st.error(f"No rate file rule for province={province}, commodity={commodity}")
         st.stop()
 
-def get_data_path(filename):
+def cost_in_cad(usage, rate, province, commodity):
     """
-    Returns the absolute path to a data file based on the current script's location.
+    A simple cost calculation:
+      - For Alberta gas: cost = usage * rate
+      - For Alberta electricity: cost = usage * (rate / 100)
+      - For Ontario (gas): cost = usage * (rate / 100)
     """
-    current_dir = os.path.dirname(__file__)
-    data_dir = os.path.join(current_dir, 'data')
-    return os.path.join(data_dir, filename)
-
-def load_csv(filepath, required_columns):
-    """
-    Loads a CSV file and checks for required columns.
-    """
-    if not os.path.exists(filepath):
-        st.error(f"Could not find '{os.path.basename(filepath)}' in the data directory. Please ensure the file exists.")
+    if province == "Alberta" and commodity == "gas":
+        return usage * rate
+    elif province == "Alberta" and commodity == "electricity":
+        return usage * (rate / 100.0)
+    elif province == "Ontario" and commodity == "gas":
+        return usage * (rate / 100.0)
+    else:
+        st.error(f"No cost calculation rule for {province}, {commodity}")
         st.stop()
-    try:
-        df = pd.read_csv(filepath, parse_dates=["date"])
-    except Exception as e:
-        st.error(f"Error reading the CSV file: {e}")
-        st.stop()
-    if not required_columns.issubset(df.columns):
-        st.error(f"CSV '{os.path.basename(filepath)}' is missing required columns. Expected columns: {required_columns}")
-        st.stop()
-    return df
 
-def check_password():
-    """
-    Returns `True` if the user had the correct password.
-    """
-    def password_entered():
-        """Checks whether a password entered by the user is correct."""
-        if hmac.compare_digest(st.session_state["password"], st.secrets["password"]):
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Don't store the password.
-        else:
-            st.session_state["password_correct"] = False
-
-    if st.session_state.get("password_correct", False):
-        return True
-
-    st.text_input("Password", type="password", on_change=password_entered, key="password")
-    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
-        st.error("😕 Password incorrect")
-    return False
-
-# --- Main Application ---
+# --- Main Application Function ---
 
 def main():
-    # Display Logos
-    st.image("assets/capitalmarketslogo.png", width=400)
-    st.title("Market Performance Simulator (CAD)")
-
-    # 1. Select User Type
-    user_type = st.radio(
-        "Are you a Current Client or New Business?",
-        ("Current Client", "New Business")
-    )
-
-    if user_type == "Current Client":
-        # --- Current Client Workflow ---
-
-        # Prompt for password
-        if not check_password():
-            st.stop()
-
-        # Load client data
-        client_csv = get_data_path("client_data_by_site.csv")
-        client_df = load_csv(client_csv, {
-            "client_name", "site_ID", "province", "commodity",
-            "contract_start_date", "client_admin_fee",
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        })
-
-        st.image("assets/portfoliopartnerslogo.png", width=800)
-        st.header("Market Performance Simulator (CAD) - Existing Clients (Multi-Site)")
-
-        # 2. User picks client
-        st.subheader("Select Client")
-        all_clients = sorted(client_df["client_name"].unique())
-        selected_client = st.selectbox("Select a client:", all_clients)
-
-        # Filter to that client
-        client_subset = client_df[client_df["client_name"] == selected_client].copy()
-        if client_subset.empty:
-            st.warning(f"No data found for client '{selected_client}'.")
-            st.stop()
-
-        # 3. Province & Commodity
-        st.subheader("Select Province & Commodity")
-        provinces_for_client = sorted(client_subset["province"].unique())
-        chosen_province = st.selectbox("Select Province:", provinces_for_client)
-
-        province_subset = client_subset[client_subset["province"] == chosen_province].copy()
-        if province_subset.empty:
-            st.warning(f"No data found for {selected_client} in {chosen_province}.")
-            st.stop()
-
-        commodities_for_client_prov = sorted(province_subset["commodity"].unique())
-        chosen_commodity = st.selectbox("Select Commodity:", commodities_for_client_prov)
-
-        final_subset = province_subset[province_subset["commodity"] == chosen_commodity].copy()
-        if final_subset.empty:
-            st.warning(f"No data found for {selected_client} in {chosen_province} with {chosen_commodity}.")
-            st.stop()
-
-        # 3a. If Ontario + gas -> prompt EGD vs Union
-        local_utility_choice = None
-        if chosen_province == "Ontario" and chosen_commodity == "gas":
-            local_utility_choice = st.selectbox(
-                "Select Ontario Gas Utility:",
-                ["EGD", "Union South"]
-            )
-
-        # 4. Aggregate vs Single Site
-        st.subheader("Portfolio vs. Single Site")
-        analysis_mode = st.radio(
-            "Do you want to analyze the entire portfolio (aggregate) or pick a single site?",
-            ["Aggregate All Sites", "Site-by-Site"]
-        )
-
-        if analysis_mode == "Aggregate All Sites":
-            month_cols = ["January", "February", "March", "April", "May", "June",
-                          "July", "August", "September", "October", "November", "December"]
-            earliest_start = final_subset["contract_start_date"].min()
-            avg_admin_fee = final_subset["client_admin_fee"].mean()
-            usage_sums = final_subset[month_cols].sum(numeric_only=True)
-
-            month_map = {
-                1: "January", 2: "February", 3: "March", 4: "April",
-                5: "May", 6: "June", 7: "July", 8: "August",
-                9: "September", 10: "October", 11: "November", 12: "December"
-            }
-            consumption = {}
-            for i in range(1, 13):
-                consumption[i] = float(usage_sums[month_map[i]])
-
-            final_contract_start = earliest_start
-            final_admin_fee = avg_admin_fee
-
-            st.write(f"**Aggregated {len(final_subset)} site(s)** for {selected_client}, {chosen_province}, {chosen_commodity}.")
-            st.write(f"**Earliest Contract Start**: {final_contract_start}")
-            st.write(f"**Average Admin Fee**: {final_admin_fee}")
+    st.title("Market Performance Simulator (CAD) - New Business")
+    st.write("This tool simulates market performance for new business scenarios based on manually supplied consumer data.")
+    
+    with st.form("new_business_form"):
+        # --- Section 1: Market Information ---
+        st.subheader("Market Information")
+        col1, col2 = st.columns(2)
+        selected_province = col1.selectbox("Select Province:", ["Alberta", "Ontario"])
+        if selected_province == "Alberta":
+            commodity_options = ["gas", "electricity"]
         else:
-            all_site_ids = sorted(final_subset["site_ID"].unique())
-            # Corrected the selectbox line below:
-            chosen_site = st.selectbox("Select Site ID:", all_site_ids)
-
-            # Additional code for handling the single site workflow would follow here...
-
-    else:
-        # --- New Business Workflow ---
-        st.header("Market Performance Simulator (CAD) - New Business")
-        # Your new business code would go here...
+            commodity_options = ["gas"]  # Adjust if Ontario electricity is supported.
+        selected_commodity = col2.selectbox("Select Commodity:", commodity_options)
+        
+        # --- Section 2: Simulation Details ---
+        st.subheader("Simulation Details")
+        col1, col2 = st.columns(2)
+        simulation_start = col1.date_input("Simulation Start Date", value=datetime(2023, 1, 1))
+        simulation_end = col2.date_input("Simulation End Date", value=datetime(2023, 12, 31), min_value=simulation_start)
+        admin_fee = st.number_input("Admin Fee", min_value=0.0, step=0.1, format="%.2f")
+        
+        # --- Section 3: Monthly Consumption ---
+        st.subheader("Monthly Consumption")
+        month_names = ["January", "February", "March", "April", "May", "June",
+                       "July", "August", "September", "October", "November", "December"]
+        consumption = {}
+        for m in month_names:
+            consumption[m] = st.number_input(f"{m} Consumption", min_value=0.0, step=1.0, format="%.2f")
+        
+        # --- Section 4: Hedge Options (Optional) ---
+        st.subheader("Hedge Options (Optional)")
+        use_hedge = st.checkbox("Include Volumetric Hedge?")
+        hedge_portion_percent = 0.0
+        hedge_start_date = None
+        hedge_term_months = 0
+        hedge_fixed_rate = 0.0
+        if use_hedge:
+            hedge_portion_percent = st.number_input("Hedged Portion (%)", min_value=0.0, max_value=100.0, step=1.0, value=30.0)
+            hedge_start_date = st.date_input("Hedge Start Date", value=simulation_start, min_value=simulation_start, max_value=simulation_end)
+            hedge_term_months = st.number_input("Hedge Term (months)", min_value=0, value=6)
+            hedge_fixed_rate = st.number_input("Hedge Fixed Rate (All-Inclusive)", min_value=0.0, step=0.1, format="%.2f")
+        
+        # --- Section 5: Additional Options ---
+        st.subheader("Additional Options")
+        show_monthly_chart = st.checkbox("Show monthly bar chart of costs?", value=True)
+        show_monthly_table = st.checkbox("Show monthly cost table & differences?", value=True)
+        
+        submitted = st.form_submit_button("Run Simulation")
+    
+    if submitted:
+        # Load historical rates.
+        rates_csv = get_rates_csv(selected_province, selected_commodity)
+        try:
+            df_rates = pd.read_csv(get_data_path(rates_csv), parse_dates=["date"])
+        except FileNotFoundError:
+            st.error(f"Could not find rates file '{rates_csv}'. Please check your files.")
+            st.stop()
+        
+        start_ts = pd.to_datetime(simulation_start)
+        end_ts = pd.to_datetime(simulation_end)
+        mask = (df_rates["date"] >= start_ts) & (df_rates["date"] <= end_ts)
+        df_filtered = df_rates.loc[mask].copy()
+        if df_filtered.empty:
+            st.error("No historical rate data found in the selected date range.")
+            st.stop()
+        
+        # For Alberta, use regulated_rate; for Ontario, use a default utility rate column.
+        if selected_province == "Alberta":
+            df_filtered["utility_selected"] = df_filtered["regulated_rate"]
+        else:
+            df_filtered["utility_selected"] = df_filtered["local_utility_rate_egd"]
+        
+        # Group the historical data by month.
+        df_filtered["year_month"] = df_filtered["date"].dt.to_period("M")
+        monthly_rates = df_filtered.groupby("year_month", as_index=False).agg({
+            "wholesale_rate": "mean",
+            "utility_selected": "mean"
+        })
+        monthly_rates["year_month"] = monthly_rates["year_month"].apply(lambda x: x.start_time)
+        monthly_rates.sort_values("year_month", inplace=True)
+        monthly_rates.reset_index(drop=True, inplace=True)
+        
+        st.subheader("Historical Data Preview")
+        st.dataframe(df_filtered.head())
+        
+        # Convert manually entered consumption into a dictionary keyed by month number.
+        consumption_by_num = {}
+        for i, m in enumerate(month_names, start=1):
+            consumption_by_num[i] = consumption[m]
+        
+        # Calculate monthly costs.
+        monthly_cost_utility = []
+        monthly_cost_client = []
+        for _, row in monthly_rates.iterrows():
+            month_dt = row["year_month"]
+            w_rate = row["wholesale_rate"]
+            u_rate = row["utility_selected"]
+            mnum = pd.Timestamp(month_dt).month
+            usage_val = consumption_by_num[mnum]
+            util_cost = cost_in_cad(usage_val, u_rate, selected_province, selected_commodity)
+            # If hedge options are used, adjust client cost for months within the hedge period.
+            if use_hedge and hedge_start_date:
+                hedge_start_ts = pd.to_datetime(hedge_start_date)
+                hedge_end_ts = hedge_start_ts + pd.DateOffset(months=int(hedge_term_months))
+                if hedge_start_ts <= month_dt < hedge_end_ts:
+                    hedged_vol = usage_val * (hedge_portion_percent / 100.0)
+                    floating_vol = usage_val - hedged_vol
+                    cost_hedged = cost_in_cad(hedged_vol, hedge_fixed_rate, selected_province, selected_commodity)
+                    cost_floating = cost_in_cad(floating_vol, w_rate + admin_fee, selected_province, selected_commodity)
+                    client_cost = cost_hedged + cost_floating
+                else:
+                    client_cost = cost_in_cad(usage_val, w_rate + admin_fee, selected_province, selected_commodity)
+            else:
+                client_cost = cost_in_cad(usage_val, w_rate + admin_fee, selected_province, selected_commodity)
+            monthly_cost_utility.append(util_cost)
+            monthly_cost_client.append(client_cost)
+        
+        total_utility = sum(monthly_cost_utility)
+        total_client = sum(monthly_cost_client)
+        
+        st.header("Cost Comparison Report (CAD)")
+        colA, colB = st.columns(2)
+        colA.metric("Utility Cost (CAD)", f"${total_utility:,.2f}")
+        colB.metric("Client Cost (CAD)", f"${total_client:,.2f}")
+        diff = total_utility - total_client
+        st.write(f"**Difference (Utility - Client)**: ${diff:,.2f}")
+        if diff > 0:
+            st.success(f"You would have saved ${diff:,.2f} by using the Client Cost.")
+        elif diff < 0:
+            st.error(f"You would have spent ${-diff:,.2f} more by using the Client Cost.")
+        else:
+            st.info("No difference between Utility and Client Cost.")
+        
+        # --- Monthly Breakdown Table and Chart ---
+        monthly_display = []
+        for i, row_m in enumerate(monthly_rates.itertuples()):
+            date_label = row_m.year_month
+            month_str = pd.Timestamp(date_label).strftime("%b %Y")
+            cost_util = monthly_cost_utility[i]
+            cost_client = monthly_cost_client[i]
+            diff_month = cost_util - cost_client
+            monthly_data = {
+                "Month": month_str,
+                "Utility Cost (CAD)": cost_util,
+                "Client Cost (CAD)": cost_client,
+                "Diff (Utility - Client)": diff_month
+            }
+            monthly_display.append(monthly_data)
+        monthly_df = pd.DataFrame(monthly_display)
+        
+        if show_monthly_chart and not monthly_df.empty:
+            st.write("### Monthly Bar Chart of Costs (CAD)")
+            chart_data = monthly_df.melt(
+                id_vars="Month",
+                value_vars=["Utility Cost (CAD)", "Client Cost (CAD)"],
+                var_name="Scenario",
+                value_name="Cost (CAD)"
+            )
+            chart = alt.Chart(chart_data).mark_bar().encode(
+                x=alt.X("Month:N", sort=None, title="Month"),
+                y=alt.Y("Cost (CAD):Q", title="Cost in CAD"),
+                color=alt.Color("Scenario:N", legend=alt.Legend(title="Scenario")),
+                xOffset="Scenario:N"
+            ).properties(width=600, height=400)
+            st.altair_chart(chart, use_container_width=True)
+        
+        if show_monthly_table and not monthly_df.empty:
+            st.write("### Monthly Costs & Differences Table (CAD)")
+            format_dict = {
+                "Utility Cost (CAD)": "{:,.2f}",
+                "Client Cost (CAD)": "{:,.2f}",
+                "Diff (Utility - Client)": "{:,.2f}"
+            }
+            existing_cols = list(monthly_df.columns)
+            formatable_cols = {col: format_dict[col] for col in existing_cols if col in format_dict}
+            st.dataframe(monthly_df.style.format(formatable_cols))
 
 if __name__ == "__main__":
     main()
