@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import re
+from pathlib import Path
 
 # Ensure required dependency is installed
 try:
@@ -9,13 +10,35 @@ try:
 except ImportError:
     st.error("Missing optional dependency 'openpyxl'. Install it using: pip install openpyxl")
 
+# --- Password Check Function ---
+def check_password():
+    """Returns True if the user entered the correct password."""
+    def password_entered():
+        if st.session_state["password"] and st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Remove password from state for security.
+        else:
+            st.session_state["password_correct"] = False
+
+    if st.session_state.get("password_correct", False):
+        return True
+
+    st.text_input("Password", type="password", on_change=password_entered, key="password")
+    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+        st.error("😕 Password incorrect")
+    return False
+
+if not check_password():
+    st.stop()
+
+# --- Set Relative Path to CSV ---
+BASE_DIR = Path(__file__).resolve().parent.parent
+client_csv_path = str(BASE_DIR / "client_data_by_site.csv")
+
 # Streamlit App Title
 st.title("Consumption Data Standardization")
 
-# CSV path
-client_csv_path = "client_data_by_site.csv"
-
-# 1) Load existing CSV
+# 1) Load existing CSV using relative path
 try:
     existing_clients_df = pd.read_csv(client_csv_path)
 except FileNotFoundError:
@@ -151,7 +174,7 @@ if uploaded_file:
         
         df_final = df_pivoted[final_columns]
         
-        # Show final
+        # Show final processed data.
         st.write("### Processed Data")
         st.dataframe(df_final)
         
@@ -175,7 +198,7 @@ if uploaded_file:
                 
                 combined_df = pd.concat([existing_data, df_final], ignore_index=True)
                 
-                # (Optional) remove duplicates if you want
+                # (Optional) remove duplicates if desired:
                 # combined_df.drop_duplicates(
                 #     subset=[
                 #         "client_name", "account_number", 

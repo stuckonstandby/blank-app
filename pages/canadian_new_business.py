@@ -57,31 +57,31 @@ def cost_in_cad(usage, rate, province, commodity):
 def main():
     st.title("Market Performance Simulator (CAD) - New Business")
     st.write("This tool simulates market performance for new business scenarios based on manually supplied consumer data.")
-    
-    # If clear_results flag is set, do not show simulation results.
-    if "clear_results" not in st.session_state:
-        st.session_state.clear_results = False
 
+    # --- Province & Commodity Selection (Outside the Form) ---
+    st.subheader("Market Information")
+    selected_province = st.selectbox("Select Province:", ["Alberta", "Ontario", "Quebec"], key="selected_province")
+    if selected_province == "Alberta":
+        commodity_options = ["gas", "electricity"]
+    elif selected_province == "Ontario":
+        commodity_options = ["gas", "electricity"]
+    elif selected_province == "Quebec":
+        commodity_options = ["gas"]
+    selected_commodity = st.selectbox("Select Commodity:", commodity_options, key="selected_commodity")
+    
+    # If Ontario electricity is selected, display "Coming soon!" and stop.
+    if selected_province == "Ontario" and selected_commodity == "electricity":
+        st.write("Coming soon!")
+        st.stop()
+    
+    # --- Simulation Form ---
     with st.form("new_business_form"):
-        # --- Section 1: Market Information ---
-        st.subheader("Market Information")
-        col1, col2 = st.columns(2)
-        selected_province = col1.selectbox("Select Province:", ["Alberta", "Ontario", "Quebec"], key="selected_province")
-        if selected_province == "Alberta":
-            commodity_options = ["gas", "electricity"]
-        else:
-            # For Ontario and Quebec, only gas is supported.
-            commodity_options = ["gas"]
-        selected_commodity = col2.selectbox("Select Commodity:", commodity_options, key="selected_commodity")
-        
-        # --- Section 2: Simulation Details ---
         st.subheader("Simulation Details")
         col1, col2 = st.columns(2)
         simulation_start = col1.date_input("Simulation Start Date", value=datetime(2023, 1, 1), key="simulation_start")
         simulation_end = col2.date_input("Simulation End Date", value=datetime(2023, 12, 31), min_value=simulation_start, key="simulation_end")
         admin_fee = st.number_input("Admin Fee", min_value=0.0, step=0.1, format="%.2f", key="admin_fee")
         
-        # --- Section 3: Monthly Consumption ---
         st.subheader("Monthly Consumption")
         month_names = ["January", "February", "March", "April", "May", "June",
                        "July", "August", "September", "October", "November", "December"]
@@ -89,7 +89,6 @@ def main():
         for m in month_names:
             consumption[m] = st.number_input(f"{m} Consumption", min_value=0, step=1, format="%d", key=f"consumption_{m}")
         
-        # --- Section 4: Hedge Options (Optional) ---
         st.subheader("Hedge Options (Optional)")
         use_hedge = st.checkbox("Include Volumetric Hedge?", key="use_hedge")
         hedge_portion_percent = 0.0
@@ -102,7 +101,6 @@ def main():
             hedge_term_months = st.number_input("Hedge Term (months)", min_value=0, value=6, key="hedge_term_months")
             hedge_fixed_rate = st.number_input("Hedge Fixed Rate (All-Inclusive)", min_value=0.0, step=0.1, format="%.2f", key="hedge_fixed_rate")
         
-        # --- Section 5: Additional Options ---
         st.subheader("Additional Options")
         show_monthly_chart = st.checkbox("Show monthly bar chart of costs?", value=True, key="show_monthly_chart")
         show_monthly_table = st.checkbox("Show monthly cost table & differences?", value=True, key="show_monthly_table")
@@ -113,12 +111,14 @@ def main():
         
         submitted = st.form_submit_button("Run Simulation")
     
-    # When form is (re)submitted, clear_results flag is reset.
+    # Session flag to clear results (if Clear Results button is pressed)
+    if "clear_results" not in st.session_state:
+        st.session_state.clear_results = False
     if submitted:
         st.session_state.clear_results = False
 
     if submitted and not st.session_state.clear_results:
-        # Load historical rates.
+        # --- Simulation Logic ---
         rates_csv = get_rates_csv(selected_province, selected_commodity)
         try:
             df_rates = pd.read_csv(get_data_path(rates_csv), parse_dates=["date"])
@@ -173,9 +173,9 @@ def main():
             u_rate = row["utility_selected"]
             mnum = pd.Timestamp(month_dt).month
             actual_usage = consumption_by_num[mnum]
-            # Utility cost always uses the actual consumption.
+            # Utility cost always uses actual consumption.
             util_cost = cost_in_cad(actual_usage, u_rate, selected_province, selected_commodity)
-            # For client cost, use the equalized consumption if Bundle-T Billing is enabled.
+            # For client cost, if Bundle-T Billing is enabled, use equalized consumption.
             if selected_commodity == "gas" and equalize_consumption_checkbox:
                 usage_val_client = equal_consumption
             else:
@@ -257,7 +257,7 @@ def main():
             formatable_cols = {col: format_dict[col] for col in existing_cols if col in format_dict}
             st.dataframe(monthly_df.style.format(formatable_cols))
         
-        # Add a button to clear the results and return to the pre-submission state.
+        # --- Clear Results Button ---
         if st.button("Clear Results"):
             st.session_state.clear_results = True
             st.experimental_rerun()
